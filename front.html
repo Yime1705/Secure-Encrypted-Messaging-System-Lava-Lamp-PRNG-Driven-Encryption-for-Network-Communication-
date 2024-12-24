@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Messaging System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background-color: #f0f2f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #e4e6eb;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .nav-tab.active {
+            background-color: #1877f2;
+            color: white;
+        }
+
+        .page {
+            display: none;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        /* Camera Page */
+        .camera-container {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        #video {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .capture-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .captured-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .captured-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+        /* Messaging Page */
+        .chat-container {
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            max-width: 70%;
+        }
+
+        .message.sent {
+            margin-left: auto;
+        }
+
+        .message-content {
+            padding: 10px;
+            border-radius: 8px;
+            background: #e4e6eb;
+        }
+
+        .message.sent .message-content {
+            background: #1877f2;
+            color: white;
+        }
+
+        .message-form {
+            display: flex;
+            gap: 10px;
+        }
+
+        #message-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        #send-btn {
+            padding: 10px 20px;
+            background: #1877f2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        /* Logs Page */
+        .logs {
+            height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .log-entry {
+            padding: 10px;
+            border-bottom: 1px solid #e4e6eb;
+        }
+
+        .log-timestamp {
+            color: #65676b;
+            font-size: 12px;
+        }
+
+        .log-content {
+            margin-top: 5px;
+        }
+
+        .key-display {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f0fe;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-page="camera">Camera</button>
+            <button class="nav-tab" data-page="messaging">Messaging</button>
+            <button class="nav-tab" data-page="logs">System Logs</button>
+        </div>
+
+        <div id="camera-page" class="page active">
+            <div class="camera-container">
+                <video id="video" autoplay></video>
+                <button class="capture-btn" id="capture-btn">Capture Image</button>
+                <div id="key-display" class="key-display">Generated Key: None</div>
+                <div class="captured-images" id="captured-images"></div>
+            </div>
+        </div>
+
+        <div id="messaging-page" class="page">
+            <div class="chat-container">
+                <div class="messages" id="messages"></div>
+                <form class="message-form" id="message-form">
+                    <input type="text" id="message-input" placeholder="Type a message...">
+                    <button type="submit" id="send-btn">Send</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="logs-page" class="page">
+            <div class="logs" id="logs"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentKey = '';
+        const logs = [];
+
+        // Navigation
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Update active tab
+                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Show corresponding page
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById(`${tab.dataset.page}-page`).classList.add('active');
+            });
+        });
+
+        // Camera functionality
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('video').srcObject = stream;
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                addLog('Error', 'Failed to access camera');
+            }
+        }
+
+        function generateKeyFromImage(imageData) {
+            // Simple hash function for demo
+            return CryptoJS.SHA256(imageData).toString().substr(0, 16);
+        }
+
+        document.getElementById('capture-btn').addEventListener('click', () => {
+            const video = document.getElementById('video');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            // Generate key from image data
+            const imageData = canvas.toDataURL('image/png');
+            currentKey = generateKeyFromImage(imageData);
+
+            // Display key
+            document.getElementById('key-display').textContent = `Generated Key: ${currentKey}`;
+
+            // Add captured image
+            const img = document.createElement('img');
+            img.src = imageData;
+            img.className = 'captured-image';
+            document.getElementById('captured-images').appendChild(img);
+
+            addLog('Key Generation', `New key generated: ${currentKey}`);
+        });
+
+        // Messaging functionality
+        class RC4 {
+            static encrypt(key, text) {
+                return CryptoJS.RC4.encrypt(text, key).toString();
+            }
+
+            static decrypt(key, encrypted) {
+                return CryptoJS.RC4.decrypt(encrypted, key).toString(CryptoJS.enc.Utf8);
+            }
+        }
+
+        document.getElementById('message-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const input = document.getElementById('message-input');
+            const message = input.value.trim();
+
+            if (message && currentKey) {
+                const encrypted = RC4.encrypt(currentKey, message);
+                addMessage(message, encrypted, true);
+                addLog('Message Sent', `Original: ${message}, Encrypted: ${encrypted}`);
+
+                // Simulate server response
+                setTimeout(() => {
+                    const response = `Reply to: ${message}`;
+                    const encryptedResponse = RC4.encrypt(currentKey, response);
+                    addMessage(response, encryptedResponse, false);
+                    addLog('Message Received', `Original: ${response}, Encrypted: ${encryptedResponse}`);
+                }, 1000);
+
+                input.value = '';
+            } else if (!currentKey) {
+                alert('Please generate a key first using the camera');
+            }
+        });
+
+        function addMessage(message, encrypted, sent) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sent ? 'sent' : 'received'}`;
+            messageDiv.innerHTML = `
+                <div class="message-content">
+                    <div>${message}</div>
+                    <small style="opacity: 0.7">Encrypted: ${encrypted}</small>
+                </div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Logging functionality
+        function addLog(action, detail) {
+            const log = {
+                timestamp: new Date().toLocaleTimeString(),
+                action,
+                detail
+            };
+            logs.push(log);
+
+            const logsDiv = document.getElementById('logs');
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <div class="log-timestamp">${log.timestamp}</div>
+                <div class="log-content">
+                    <strong>${log.action}:</strong> ${log.detail}
+                </div>
+            `;
+            logsDiv.appendChild(logEntry);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        // Initialize
+        initCamera();
+    </script>
+</body>
+</html>
